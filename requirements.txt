@@ -1,1 +1,4 @@
 Flask==3.0.3
+firebase-admin==6.0.0
+flask-cors==5.0.0
+werkzeug>=2.2.2
