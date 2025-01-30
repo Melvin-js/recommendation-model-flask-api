@@ -1,10 +1,10 @@
 import os
 import json
+import base64
 import firebase_admin
 from firebase_admin import credentials, firestore
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import base64
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all domains (or restrict to specific domains)
@@ -23,7 +23,7 @@ def greet():
 
 def initialize_firebase():
     try:
-        # Debugging: Check if the environment variable exists
+        # Check if the environment variable exists
         firebase_credentials_base64 = os.getenv('FIREBASE_CREDENTIALS_JSON')
         
         if not firebase_credentials_base64:
@@ -58,6 +58,7 @@ def initialize_firebase():
 
 @app.before_first_request
 def before_first_request():
+    print("Before first request, initializing Firebase...")
     initialize_firebase()
 
 if __name__ == '__main__':
