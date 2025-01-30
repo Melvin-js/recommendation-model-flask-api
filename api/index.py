@@ -44,29 +44,21 @@ def initialize_firebase():
         print(f"Error initializing Firebase: {e}")
         raise e
 
-@app.route('/')
+@app.route('/', methods=['GET'])
 def home():
     return jsonify({"message": "Welcome to the Firebase Flask API!"})
 
-@app.route('/greet', methods=['GET'])
-def greet():
-    userID = request.args.get('user')
-    if userID:
-        return jsonify({"message": f"Hi, {userID}!"})
-    else:
-        return jsonify({"error": "Please specify a user id in the 'user' query parameter."}), 400
-
-@app.route('/execute-model', methods=['POST'])
+@app.route('/execute-model', methods=['GET'])
 def execute_model():
     try:
-        # Initialize Firebase (do this directly in the route to avoid lifecycle issues)
-        initialize_firebase()
-
-        # Get the user_id from the POST request body
-        user_id = request.json.get('user_id')
+        # Get the user_id from the query parameters
+        user_id = request.args.get('user_id')
 
         if not user_id:
-            return jsonify({"message": "User ID is required!"}), 400
+            return jsonify({"error": "User ID is required as a query parameter!"}), 400
+
+        # Initialize Firebase (do this directly in the route to avoid lifecycle issues)
+        initialize_firebase()
 
         # Use Firestore to interact with your database
         db = firestore.client()
