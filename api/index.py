@@ -2,17 +2,16 @@ import os
 import json
 import firebase_admin
 from firebase_admin import credentials, firestore
-from flask import Flask, jsonify, request
+from flask import Flask, request, jsonify
 from flask_cors import CORS
-from urllib.parse import quote  # Replaced werkzeug.urls.url_quote with urllib.parse.quote
+from urllib.parse import quote  # Using quote instead of werkzeug
 
-# Initialize Flask app
 app = Flask(__name__)
 
-# Enable CORS for all domains (or restrict to specific domains if needed)
+# Enable CORS (cross-origin resource sharing) for all domains
 CORS(app)
 
-# Initialize Firebase Admin SDK with the credentials (from environment variable or a file)
+# Initialize Firebase Admin SDK
 @app.before_first_request
 def initialize_firebase():
     try:
@@ -54,7 +53,6 @@ def execute_model():
             # Example of encoding a string (just as a placeholder for actual logic)
             encoded_user_id = quote(user_id)
 
-            # Send back user data as a JSON response
             return jsonify({
                 "message": "User data retrieved successfully",
                 "user_id_encoded": encoded_user_id,
@@ -66,6 +64,11 @@ def execute_model():
     except Exception as e:
         return jsonify({"message": "Error occurred", "error": str(e)}), 500
 
+
+@app.route('/', methods=['GET'])
+def home():
+    return jsonify({"message": "Welcome to the API!"})
+
 if __name__ == '__main__':
-    # Run the Flask application
+    # Run the Flask application locally (hosted on 0.0.0.0 for external access)
     app.run(debug=True, host='0.0.0.0', port=5000)
