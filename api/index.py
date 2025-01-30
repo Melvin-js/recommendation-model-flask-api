@@ -1,104 +1,105 @@
-
-import subprocess
-import json
-from sentence_transformers import SentenceTransformer
-import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
-import os
-import warnings
-import sys
-from collections import defaultdict
-from datetime import datetime
-import pandas as pd
-
 from flask import Flask, jsonify, request
 import firebase_admin
 from firebase_admin import credentials, firestore
 import os
 import json
+import subprocess
+import numpy as np
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+from collections import defaultdict
+from datetime import datetime
+import pandas as pd
+import warnings
 
+# Suppress warnings for cleaner output
+warnings.filterwarnings("ignore")
 
+# Initialize Flask app
 app = Flask(__name__)
-firebase_credentials_json = os.getenv('FIREBASE_CREDENTIALS_JSON')
 
+# Load Firebase credentials from Vercel environment variable
+firebase_credentials_json = os.getenv('FIREBASE_CREDENTIALS_JSON')
 if not firebase_credentials_json:
     raise ValueError("Firebase credentials not found in environment variables.")
 
+# Initialize Firebase
 firebase_credentials_dict = json.loads(firebase_credentials_json)
 cred = credentials.Certificate(firebase_credentials_dict)
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
+# Load SentenceTransformer model globally to avoid reloading
+model = SentenceTransformer('all-MiniLM-L12-v2')
+
+# Precompute district distance matrix for efficiency
+DISTRICT_DISTANCE_MATRIX = {
+    "Thiruvananthapuram": [0, 50, 70, 90, 120, 160, 220, 250, 270, 300, 320, 340, 380, 420],
+    "Kollam": [50, 0, 30, 50, 80, 120, 170, 200, 230, 250, 270, 290, 330, 370],
+    "Pathanamthitta": [70, 30, 0, 30, 60, 100, 150, 180, 200, 220, 240, 260, 300, 340],
+    "Alappuzha": [90, 50, 30, 0, 30, 70, 130, 160, 190, 210, 230, 250, 290, 320],
+    "Kottayam": [120, 80, 60, 30, 0, 40, 100, 130, 160, 180, 200, 220, 260, 290],
+    "Idukki": [160, 120, 100, 70, 40, 0, 60, 90, 120, 140, 160, 180, 220, 250],
+    "Ernakulam": [220, 170, 150, 130, 100, 60, 0, 30, 60, 90, 110, 130, 170, 200],
+    "Thrissur": [250, 200, 180, 160, 130, 90, 30, 0, 30, 60, 80, 100, 140, 170],
+    "Palakkad": [270, 230, 200, 190, 160, 120, 60, 30, 0, 30, 50, 70, 110, 140],
+    "Malappuram": [300, 250, 220, 210, 180, 140, 90, 60, 30, 0, 30, 50, 90, 120],
+    "Kozhikode": [320, 270, 240, 230, 200, 160, 110, 80, 50, 30, 0, 20, 60, 90],
+    "Wayanad": [340, 290, 260, 250, 220, 180, 130, 100, 70, 50, 20, 0, 40, 70],
+    "Kannur": [380, 330, 300, 290, 260, 220, 170, 140, 110, 90, 60, 40, 0, 40],
+    "Kasaragod": [420, 370, 340, 320, 290, 250, 200, 170, 140, 120, 90, 70, 40, 0]
+}
+
+# Precompute district names for faster lookup
+DISTRICT_NAMES = list(DISTRICT_DISTANCE_MATRIX.keys())
+
+# Flask endpoint to execute the model
 @app.route('/execute-model', methods=['POST'])
-def get_user():
+def execute_model():
     try:
         data = request.get_json()
-
         if 'userID' not in data:
             return jsonify({"error": "userID is required in the JSON body"}), 400
+        
         user_id = data['userID']
-
         result = run_model(user_id)
-
-        return jsonify({"message": "Executed Sucessfully"}), 200
+        return jsonify({"message": result}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
-
+# Helper functions
 def get_user_data(user_id):
-    try:
-        # Path to the user document in Firestore
-        user_ref = db.collection('users').document(user_id)  
-        
-        # Retrieve data from Firestore
-        user_data = user_ref.get()
-        
-        if user_data.exists:
-            # Get the user data as a dictionary
-            user_dict = user_data.to_dict()
-            
-            # Check if 'recommended' field exists
-            if 'recommended' not in user_dict:
-                user_ref.update({'recommended': []})
-                print(f"Created 'recommended' array for userID: {user_id}")
-            
-            return user_dict
-        else:
-            print(f"No data found for userID: {user_id}")
-            return None
-    except Exception as e:
-        print(f"Error retrieving user data: {e}")
+    """Fetch user data from Firestore."""
+    user_ref = db.collection('users').document(user_id)
+    user_data = user_ref.get()
+    if user_data.exists:
+        user_dict = user_data.to_dict()
+        if 'recommended' not in user_dict:
+            user_ref.update({'recommended': []})
+            print(f"Created 'recommended' array for userID: {user_id}")
+        return user_dict
+    else:
+        print(f"No data found for userID: {user_id}")
         return None
 
-
 def save_recommended(user_id, recommended_array):
-    try:
-        # Path to the user document in Firestore
-        user_ref = db.collection('users').document(user_id)  
-        
-        # Update the 'recommended' array in Firestore
-        user_ref.update({'recommended': recommended_array})
-        
-        print(f"Saved 'recommended' array for userID: {user_id}")
-        return True
-    except Exception as e:
-        print(f"Error saving 'recommended' array for userID {user_id}: {e}")
-        return False
-
+    """Save recommended locations to Firestore."""
+    user_ref = db.collection('users').document(user_id)
+    user_ref.update({'recommended': recommended_array})
+    print(f"Saved 'recommended' array for userID: {user_id}")
+    return True
 
 def load_dataset():
+    """Load the dataset from a CSV file."""
     csv_path = os.path.join('public', 'dataset.csv')
     try:
         return pd.read_csv(csv_path)
     except Exception as e:
         print(f"Error loading dataset: {e}")
         return None
-    
-
-
 
 def get_current_season():
+    """Determine the current season based on the month."""
     current_month = datetime.now().month
     if current_month in [12, 1, 2, 3]:
         return 'winter'
@@ -109,73 +110,29 @@ def get_current_season():
     elif current_month in [10, 11]:
         return 'autumn'
 
-
 def seasons_overlap(season1, season2):
+    """Check if two seasons overlap."""
     season_map = {
         'Winter': [12, 1, 2, 3],
         'Spring': [4, 5, 6],
         'Summer': [7, 8, 9],
         'Autumn': [10, 11]
     }
-    
     season1_months = season_map.get(season1, [])
     season2_months = season_map.get(season2, [])
-    
-    return bool(set(season1_months) & set(season2_months))  
+    return bool(set(season1_months) & set(season2_months))
 
-
-
-
-
-#<<<<<<<<<<< AI Model >>>>>>>>>>>>>>
-
-
-def llm_model(user_id):
-    try:
-        user_data = get_user_data(user_id)
-        user = user_data.get(user_id, {})
-
-        locations = user.get("likedLocations", [])
-        result = subprocess.run(
-            ['python', 'recc.py'] + locations,
-            capture_output=True, text=True, check=True
-        )
-        return result.stdout.strip()
-    except subprocess.CalledProcessError as e:
-        print(f"Error while running the llm model{e}")
-        return None
-
-def calculate_location_distance(currentLocation, location):
-
-    district_distance_matrix = {
-        "Thiruvananthapuram": [0, 50, 70, 90, 120, 160, 220, 250, 270, 300, 320, 340, 380, 420],
-        "Kollam": [50, 0, 30, 50, 80, 120, 170, 200, 230, 250, 270, 290, 330, 370],
-        "Pathanamthitta": [70, 30, 0, 30, 60, 100, 150, 180, 200, 220, 240, 260, 300, 340],
-        "Alappuzha": [90, 50, 30, 0, 30, 70, 130, 160, 190, 210, 230, 250, 290, 320],
-        "Kottayam": [120, 80, 60, 30, 0, 40, 100, 130, 160, 180, 200, 220, 260, 290],
-        "Idukki": [160, 120, 100, 70, 40, 0, 60, 90, 120, 140, 160, 180, 220, 250],
-        "Ernakulam": [220, 170, 150, 130, 100, 60, 0, 30, 60, 90, 110, 130, 170, 200],
-        "Thrissur": [250, 200, 180, 160, 130, 90, 30, 0, 30, 60, 80, 100, 140, 170],
-        "Palakkad": [270, 230, 200, 190, 160, 120, 60, 30, 0, 30, 50, 70, 110, 140],
-        "Malappuram": [300, 250, 220, 210, 180, 140, 90, 60, 30, 0, 30, 50, 90, 120],
-        "Kozhikode": [320, 270, 240, 230, 200, 160, 110, 80, 50, 30, 0, 20, 60, 90],
-        "Wayanad": [340, 290, 260, 250, 220, 180, 130, 100, 70, 50, 20, 0, 40, 70],
-        "Kannur": [380, 330, 300, 290, 260, 220, 170, 140, 110, 90, 60, 40, 0, 40],
-        "Kasaragod": [420, 370, 340, 320, 290, 250, 200, 170, 140, 120, 90, 70, 40, 0]
-    }
-
-    currentLocation = currentLocation.strip().lower()
+def calculate_location_distance(current_location, location):
+    """Calculate the distance between two locations using the precomputed matrix."""
+    current_location = current_location.strip().lower()
     location = location.strip().lower()
     
-    for district_name in district_distance_matrix.keys():
-        if currentLocation == district_name.strip().lower():
-            district_locations = list(district_distance_matrix.keys())
-
-            for idx, district in enumerate(district_locations):
+    for district_name in DISTRICT_NAMES:
+        if current_location == district_name.strip().lower():
+            for idx, district in enumerate(DISTRICT_NAMES):
                 if location == district.strip().lower():
-                    return district_distance_matrix[district_name][idx]
-                
-    return 1000
+                    return DISTRICT_DISTANCE_MATRIX[district_name][idx]
+    return 1000  # Default distance if not found
 
 def knn_cosine(user_id, user_data, dataset, model, top_k=5):
     user_key = user_id
@@ -388,105 +345,34 @@ def hybrid_model(user_id, user_data, dataset, knn_model, collab_model, knn_weigh
     return top_k_locations
 
 
-
-def evaluate_model(user_id, user_data_path, dataset_path, test_data_path, top_k=5, weights=None):
-    """
-    Evaluates the model by comparing the recommended locations with the preferred locations from test_data.json.
-    Computes Precision, Recall, F1-Score, and MAP.
-    """
-    try:
-        dataset = pd.read_csv(dataset_path)
-        with open(user_data_path, 'r') as f:
-            user_data = json.load(f)
-        with open(test_data_path, 'r') as f:
-            test_data = json.load(f)
-    except Exception as e:
-        print(f"Error loading data: {e}")
-        return
-
-    model = SentenceTransformer('all-MiniLM-L12-v2')
-    recommendations = knn_cosine(user_id, user_data, dataset, knn_cosine, top_k=top_k)
-
-    if not recommendations:
-        print("No recommendations generated.")
-        return
-
-    true_preferred_locations = set(test_data.get(user_id, {}).get("preferredLocations", []))
-    recommended_locations = [location for location, _ in recommendations]
-
-
-    true_positives = len(set(recommended_locations) & true_preferred_locations)
-    precision = true_positives / len(recommended_locations) if len(recommended_locations) > 0 else 0.0
-    recall = true_positives / len(true_preferred_locations) if len(true_preferred_locations) > 0 else 0.0
-    f1_score_value = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
-
-
-    print(f"\nEvaluation results of the model")
-    print(f"Precision: {precision:.4f}")
-    print(f"Recall: {recall:.4f}")
-    #print(f"F1-Score: {f1_score_value:.4f}")
-
-
-def knn_model(user_id):
-
+def run_model(user_id):
+    """Execute the recommendation model for a given user."""
+    if user_id is None:
+        return "Error: User ID not provided."
+    
     dataset = load_dataset()
     user_data = get_user_data(user_id)
-
+    
     if dataset is None or dataset.empty or user_data is None:
-        print("Error: Dataset or user data is missing or empty.")
         return "Error: Dataset or user data is missing or empty."
-
-
+    
     top_k = 7
-    knn_weight = 0.51 
+    knn_weight = 0.51
     collab_weight = 0.495
-
-    recommendations = hybrid_model(user_id, user_data, dataset, knn_cosine, collaborative_filtering, 
-                                   knn_weight=knn_weight, collab_weight=collab_weight, top_k=top_k)
-
+    
+    recommendations = hybrid_model(
+        user_id, user_data, dataset, knn_cosine, collaborative_filtering,
+        knn_weight=knn_weight, collab_weight=collab_weight, top_k=top_k
+    )
+    
     if not recommendations:
-        print("No recommendations generated.")
         return "No recommendations generated."
-
-
+    
     recommended_set = set(user_data.get("recommended", []))
-    final_sets = []
-
-    for sim_location, _ in recommendations:
-        if sim_location not in recommended_set:
-            final_sets.append(sim_location)
-
-    #print(final_sets)
+    final_sets = [sim_location for sim_location, _ in recommendations if sim_location not in recommended_set]
+    
     save_recommended(user_id, final_sets)
-
-    # print("\nTop 5 recommendations:")
-    # current_location = user_data[user_id].get("currentLocation", "")
-    # for sim_location, sim_score in recommendations:
-    #     label = "(top)" if current_location and sim_location in user_data[user_id]["recommended"] and \
-    #                         current_location.lower() == dataset[dataset['Name'] == sim_location]['Location'].values[0].lower() else ""
-    #     print(f"  - {sim_location} (Similarity: {sim_score:.4f}) {label}")
-
-
-     
-    #evaluate_model(user_id, user_data_path, dataset_path, test_data_path, top_k, weights=None)
-
-    #print(llm_model(user_id, user_data_path))
-
     return "Model executed successfully. Recommendations updated."
-
-
-def run_model(userID):
-
-    if userID is None:
-        print("Error: User ID not provided.")
-    else:
-        result = knn_model(userID)
-        print(result)
-        return result
-
-
-
-
 
 # Run the Flask app
 if __name__ == '__main__':
