@@ -12,6 +12,7 @@ CORS(app)  # Enable CORS for all domains (or restrict to specific domains)
 # Firebase initialization function
 def initialize_firebase():
     try:
+        # Retrieve the Firebase credentials base64 string from environment variable
         firebase_credentials_base64 = os.getenv('FIREBASE_CREDENTIALS_JSON')
 
         if not firebase_credentials_base64:
@@ -19,6 +20,12 @@ def initialize_firebase():
         
         # Debugging: Log the length of the encoded credentials to check if it's being passed properly
         print(f"Firebase credentials environment variable found. Length of encoded string: {len(firebase_credentials_base64)}")
+        
+        # Ensure the base64 string has the correct padding
+        # Add the necessary padding if it's missing
+        padding = len(firebase_credentials_base64) % 4
+        if padding != 0:
+            firebase_credentials_base64 += '=' * (4 - padding)
         
         # Decode the base64 string
         firebase_credentials_json = base64.b64decode(firebase_credentials_base64).decode('utf-8')
