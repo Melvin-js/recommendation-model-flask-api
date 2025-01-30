@@ -2,50 +2,63 @@ import os
 import json
 import firebase_admin
 from firebase_admin import credentials, firestore
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
+import base64
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all domains
+CORS(app)  # Enable CORS for all domains (or restrict to specific domains)
 
-def initialize_firebase():
-    """Initialize Firebase using credentials from the environment variable."""
-    try:
-        # Fetch Firebase credentials from environment variable
-        firebase_credentials_json = os.getenv('FIREBASE_CREDENTIALS_JSON')
-
-        if not firebase_credentials_json:
-            raise ValueError("Firebase credentials are not set correctly!")
-
-        # Load Firebase credentials from JSON string stored in environment variable
-        credentials_dict = json.loads(firebase_credentials_json)
-        cred = credentials.Certificate(credentials_dict)
-        firebase_admin.initialize_app(cred)
-
-        print("Firebase initialized successfully!")
-
-    except Exception as e:
-        print(f"Error initializing Firebase: {e}")
-        raise e
+@app.route('/')
+def home():
+    return jsonify({"message": "Welcome to the Firebase Flask API!"})
 
 @app.route('/greet', methods=['GET'])
 def greet():
+    userID = request.args.get('user')
+    if userID:
+        return jsonify({"message": f"Hi, {userID}!"})
+    else:
+        return jsonify({"error": "Please specify a user id in the 'user' query parameter."}), 400
+
+def initialize_firebase():
     try:
-        # Initialize Firebase for this request
-        initialize_firebase()
-
-        userID = request.args.get('user')
+        # Debugging: Check if the environment variable exists
+        firebase_credentials_base64 = os.getenv('FIREBASE_CREDENTIALS_JSON')
         
-        if userID:
-            return jsonify({"message": f"Hi, {userID}!"})
-        else:
-            return jsonify({"error": "Please specify a user id in the 'user' query parameter."}), 400
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        if not firebase_credentials_base64:
+            raise ValueError("Firebase credentials environment variable 'FIREBASE_CREDENTIALS_JSON' is missing!")
+        
+        # Debugging: Log the length of the encoded credentials to check if it's being passed properly
+        print(f"Firebase credentials environment variable found. Length of encoded string: {len(firebase_credentials_base64)}")
+        
+        # Decode the base64 string
+        firebase_credentials_json = base64.b64decode(firebase_credentials_base64).decode('utf-8')
+        
+        # Debugging: Log part of the decoded string to ensure it looks like valid JSON
+        print(f"Decoded Firebase credentials: {firebase_credentials_json[:100]}...")  # Only show part of it for security
 
-@app.route('/', methods=['GET'])
-def home():
-    return jsonify({"message": "Hi, This is a basic API!"})
+        # Load the JSON string as a Python dictionary
+        credentials_dict = json.loads(firebase_credentials_json)
+
+        # Debugging: Check if the JSON was successfully loaded
+        print("Firebase credentials JSON successfully loaded!")
+
+        # Initialize Firebase Admin SDK
+        cred = credentials.Certificate(credentials_dict)
+        firebase_admin.initialize_app(cred)
+
+        # Debugging: Confirm successful initialization
+        print("Firebase initialized successfully!")
+
+    except Exception as e:
+        # Log the error in detail for debugging
+        print(f"Error initializing Firebase: {e}")
+        raise e
+
+@app.before_first_request
+def before_first_request():
+    initialize_firebase()
 
 if __name__ == '__main__':
     app.run(debug=True)
