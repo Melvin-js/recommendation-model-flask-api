@@ -29,6 +29,22 @@ cred = credentials.Certificate(firebase_credentials_dict)
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
+# Flask endpoint to execute the model
+@app.route('/execute-model', methods=['POST'])
+def execute_model():
+    try:
+        data = request.get_json()
+        if 'userID' not in data:
+            return jsonify({"error": "userID is required in the JSON body"}), 400
+        
+        user_id = data['userID']
+        # result = run_model(user_id)
+        result = lama_model(user_id)
+        return jsonify({"message": result}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # Load SentenceTransformer model globally to avoid reloading
 model = SentenceTransformer('all-MiniLM-L12-v2')
 
@@ -53,19 +69,6 @@ DISTRICT_DISTANCE_MATRIX = {
 # Precompute district names for faster lookup
 DISTRICT_NAMES = list(DISTRICT_DISTANCE_MATRIX.keys())
 
-# Flask endpoint to execute the model
-@app.route('/execute-model', methods=['POST'])
-def execute_model():
-    try:
-        data = request.get_json()
-        if 'userID' not in data:
-            return jsonify({"error": "userID is required in the JSON body"}), 400
-        
-        user_id = data['userID']
-        result = run_model(user_id)
-        return jsonify({"message": result}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 # Helper functions
 def get_user_data(user_id):
