@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 import firebase_admin
 from firebase_admin import credentials, firestore
 import os
@@ -23,20 +23,32 @@ firebase_admin.initialize_app(cred)
 # Initialize Firestore client
 db = firestore.client()
 
-@app.route('/users', methods=['GET'])
-def get_users():
+@app.route('/user', methods=['POST'])
+def get_user():
     try:
-        # Reference to the 'users' collection
-        users_ref = db.collection('users')
-        
-        # Fetch all documents in the 'users' collection
-        users = users_ref.stream()
-        
-        # Convert Firestore documents to a list of dictionaries
-        users_list = [user.to_dict() for user in users]
-        
-        # Return the list of users as JSON
-        return jsonify(users_list), 200
+        # Get the JSON body from the request
+        data = request.get_json()
+
+        # Check if 'userID' is present in the JSON body
+        if 'userID' not in data:
+            return jsonify({"error": "userID is required in the JSON body"}), 400
+
+        # Get the userID from the JSON body
+        user_id = data['userID']
+
+        # Reference to the 'users' collection and fetch the specific user document
+        user_ref = db.collection('users').document(user_id)
+        user_doc = user_ref.get()
+
+        # Check if the user document exists
+        if not user_doc.exists:
+            return jsonify({"error": "User not found"}), 404
+
+        # Convert the Firestore document to a dictionary
+        user_data = user_doc.to_dict()
+
+        # Return the user data as JSON
+        return jsonify(user_data), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
