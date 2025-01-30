@@ -1,5 +1,14 @@
 {
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/api/index" }
-  ]
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python",
+      "config": {
+        "maxDuration": 10
+      }
+    }
+  ],
+  "env": {
+    "FLASK_APP": "index.py"
+  }
 }
