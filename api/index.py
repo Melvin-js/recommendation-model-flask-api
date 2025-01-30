@@ -9,23 +9,11 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all domains (or restrict to specific domains)
 
-@app.route('/')
-def home():
-    return jsonify({"message": "Welcome to the Firebase Flask API!"})
-
-@app.route('/greet', methods=['GET'])
-def greet():
-    userID = request.args.get('user')
-    if userID:
-        return jsonify({"message": f"Hi, {userID}!"})
-    else:
-        return jsonify({"error": "Please specify a user id in the 'user' query parameter."}), 400
-
+# Firebase initialization function
 def initialize_firebase():
     try:
-        # Check if the environment variable exists
         firebase_credentials_base64 = os.getenv('FIREBASE_CREDENTIALS_JSON')
-        
+
         if not firebase_credentials_base64:
             raise ValueError("Firebase credentials environment variable 'FIREBASE_CREDENTIALS_JSON' is missing!")
         
@@ -56,10 +44,47 @@ def initialize_firebase():
         print(f"Error initializing Firebase: {e}")
         raise e
 
-@app.before_first_request
-def before_first_request():
-    print("Before first request, initializing Firebase...")
-    initialize_firebase()
+@app.route('/')
+def home():
+    return jsonify({"message": "Welcome to the Firebase Flask API!"})
+
+@app.route('/greet', methods=['GET'])
+def greet():
+    userID = request.args.get('user')
+    if userID:
+        return jsonify({"message": f"Hi, {userID}!"})
+    else:
+        return jsonify({"error": "Please specify a user id in the 'user' query parameter."}), 400
+
+@app.route('/execute-model', methods=['POST'])
+def execute_model():
+    try:
+        # Initialize Firebase (do this directly in the route to avoid lifecycle issues)
+        initialize_firebase()
+
+        # Get the user_id from the POST request body
+        user_id = request.json.get('user_id')
+
+        if not user_id:
+            return jsonify({"message": "User ID is required!"}), 400
+
+        # Use Firestore to interact with your database
+        db = firestore.client()
+
+        # Sample Firebase query to get user data
+        user_ref = db.collection('users').document(user_id)
+        user_data = user_ref.get()
+
+        if user_data.exists:
+            return jsonify({
+                "message": "User data retrieved successfully",
+                "user_data": user_data.to_dict()
+            })
+        else:
+            return jsonify({"message": "User not found!"}), 404
+
+    except Exception as e:
+        return jsonify({"message": "Error occurred", "error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
