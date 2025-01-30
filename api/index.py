@@ -12,6 +12,7 @@ def greet():
     
     userID = request.args.get('user')
     
+
     
     if userID:
         return jsonify({"message": f"Hi, {userID}!"})
@@ -20,7 +21,7 @@ def greet():
 
 @app.route('/', methods=['GET'])
 def home():
-   initialize_firebase()
+
    return jsonify({"message": f"Hi, This is basic API!"})
 
 
