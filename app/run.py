@@ -11,11 +11,13 @@ from collections import defaultdict
 from datetime import datetime
 import pandas as pd
 import warnings
+# from app import create_app
 
 # Suppress warnings for cleaner output
 warnings.filterwarnings("ignore")
 
 # Initialize Flask app
+# app = create_app()
 app = Flask(__name__)
 
 # Load Firebase credentials from Vercel environment variable
@@ -28,14 +30,6 @@ firebase_credentials_dict = json.loads(firebase_credentials_json)
 cred = credentials.Certificate(firebase_credentials_dict)
 firebase_admin.initialize_app(cred)
 db = firestore.client()
-
-#Local Run
-# cred = credentials.Certificate('C:/Users/melvi/Desktop/Travel App/travel_web/lib/firebaseConfig.json')  # Replace with your JSON file path
-# firebase_admin.initialize_app(cred)
-
-# # Initialize Firestore
-# db = firestore.client()
-
 
 # Flask endpoint to execute the model
 @app.route('/execute-model', methods=['POST'])
