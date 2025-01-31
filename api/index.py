@@ -38,8 +38,7 @@ def execute_model():
             return jsonify({"error": "userID is required in the JSON body"}), 400
         
         user_id = data['userID']
-        # result = run_model(user_id)
-        result = lama_model(user_id)
+        result = run_model(user_id)
         return jsonify({"message": result}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
