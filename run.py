@@ -31,6 +31,18 @@ cred = credentials.Certificate(firebase_credentials_dict)
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
+
+# Local Run
+# cred = credentials.Certificate('C:/Users/melvi/Desktop/Travel App/travel_web/lib/firebaseConfig.json')  # Replace with your JSON file path
+# firebase_admin.initialize_app(cred)
+
+# # Initialize Firestore
+# db = firestore.client()
+
+@app.route('/', methods=['POST'])
+def home():
+    return jsonify({"message": "Hey there"})
+
 # Flask endpoint to execute the model
 @app.route('/execute-model', methods=['POST'])
 def execute_model():
