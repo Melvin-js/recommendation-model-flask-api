@@ -11,7 +11,12 @@ from collections import defaultdict
 from datetime import datetime
 import pandas as pd
 import warnings
-# from app import create_app
+from flask_cors import CORS
+
+from flask import Flask, render_template, request, redirect, url_for, session, flash
+import requests
+import google.generativeai as palm
+
 
 # Suppress warnings for cleaner output
 warnings.filterwarnings("ignore")
@@ -19,25 +24,26 @@ warnings.filterwarnings("ignore")
 # Initialize Flask app
 # app = create_app()
 app = Flask(__name__)
+CORS(app)
 
 # Load Firebase credentials from Vercel environment variable
-firebase_credentials_json = os.getenv('FIREBASE_CREDENTIALS_JSON')
-if not firebase_credentials_json:
-    raise ValueError("Firebase credentials not found in environment variables.")
+# firebase_credentials_json = os.getenv('FIREBASE_CREDENTIALS_JSON')
+# if not firebase_credentials_json:
+#     raise ValueError("Firebase credentials not found in environment variables.")
 
-# Initialize Firebase
-firebase_credentials_dict = json.loads(firebase_credentials_json)
-cred = credentials.Certificate(firebase_credentials_dict)
-firebase_admin.initialize_app(cred)
-db = firestore.client()
+# # Initialize Firebase
+# firebase_credentials_dict = json.loads(firebase_credentials_json)
+# cred = credentials.Certificate(firebase_credentials_dict)
+# firebase_admin.initialize_app(cred)
+# db = firestore.client()
 
 
 # Local Run
-# cred = credentials.Certificate('C:/Users/melvi/Desktop/Travel App/travel_web/lib/firebaseConfig.json')  # Replace with your JSON file path
-# firebase_admin.initialize_app(cred)
+cred = credentials.Certificate('C:/Users/melvi/Desktop/Travel App/travel_web/lib/firebaseConfig.json')  # Replace with your JSON file path
+firebase_admin.initialize_app(cred)
 
-# # Initialize Firestore
-# db = firestore.client()
+# Initialize Firestore
+db = firestore.client()
 
 @app.route('/', methods=['POST'])
 def home():
@@ -389,6 +395,107 @@ def run_model(user_id):
     
     save_recommended(user_id, final_sets)
     return "Model executed successfully. Recommendations updated."
+
+
+
+
+
+#<<<<<<<<<<<<<<  Itinerary Code >>>>>>>>>>>>>>>>>>
+
+api_key = "HYA7MBM9MQT687ZDAXUZ27G9A"
+secret_key='21312edasASDASDASDASDASDS'
+palm_api_key = 'AIzaSyAxPQGhD6BZY5-oCHqNZQ4V2JhcgmgxluI'
+
+
+@app.route('/generateItinerary', methods=["GET", "POST"])
+def generate():
+
+    if request.method == "POST":
+        global itinerary_data
+        global source, destination, start_date, end_date
+
+        # Parse JSON from the request
+        data = request.get_json()
+        
+        # Store the itinerary details
+        itinerary_data = {
+            'boardingPoint': data.get('boardingPoint'),
+            'destination': data.get('destination'),
+            'travelDate': data.get('travelDate'),
+            'returnDate': data.get('returnDate'),
+            'no_of_day':  data.get('no_of_day')
+        }
+
+        source = itinerary_data.get('boardingPoint')
+        destination = itinerary_data.get('destination')
+        start_date = itinerary_data.get('travelDate')
+        end_date = itinerary_data.get('returnDate')
+        no_of_day = itinerary_data.get('no_of_day')
+
+        try:
+            weather_data = get_weather_data(api_key, destination, start_date, end_date)
+        except requests.exceptions.RequestException as e:
+            return jsonify({"message": "Error in retrieving weather data", "data": e})
+        try:
+            plan = generate_itinerary(source, destination, start_date, end_date, no_of_day)
+        except Exception as e:
+             return jsonify({"message": "Unable to generate itinerary", "data": e})
+        
+        if weather_data and plan:
+          return jsonify({
+            "message": "Itinerary generated successfully", 
+            "weather_data": weather_data, 
+            "plan": plan
+        })
+
+        
+
+    return jsonify({"message": "Genereate response None"})
+
+
+
+def get_weather_data(api_key: str, location: str, start_date: str, end_date: str) -> dict:
+    """
+    Retrieves weather data from Visual Crossing Weather API for a given location and date range.
+
+    Args:
+        api_key (str): API key for Visual Crossing Weather API.
+        location (str): Location for which weather data is to be retrieved.
+        start_date (str): Start date of the date range in "MM/DD/YYYY" format.
+        end_date (str): End date of the date range in "MM/DD/YYYY" format.
+
+    Returns:
+        dict: Weather data in JSON format.
+
+    Raises:
+        requests.exceptions.RequestException: If there is an error in making the API request.
+    """
+    # Date Formatting as per API "YYYY-MM-DD"
+
+    base_url = f"https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/{location}/{start_date}/{end_date}?unitGroup=metric&include=days&key={api_key}&contentType=json"
+
+    try:
+        response = requests.get(base_url)
+        response.raise_for_status()
+        data = response.json()
+        return data
+    except requests.exceptions.RequestException as e:
+        print("Error:", str(e))
+    raise  # Optionally raise the exception again to propagate it up the call stack
+
+
+
+def generate_itinerary(source, destination, start_date, end_date, no_of_day):
+    palm.configure(api_key=palm_api_key)
+    model = palm.GenerativeModel(model_name="gemini-pro")
+    # print(list(palm.list_models()))
+
+    prompt = f"Generate a personalized trip itinerary for a {no_of_day}-day trip {source} to {destination} from {start_date} to {end_date}, with an optimum budget (Currency:INR)."
+    response = model.generate_content(prompt)
+    return(response.text)
+
+
+
 
 # Run the Flask app
 if __name__ == '__main__':
