@@ -39,7 +39,7 @@ CORS(app)
 
 
 # Local Run
-cred = credentials.Certificate('C:/Users/melvi/Desktop/Travel App/travel_web/lib/firebaseConfig.json')  # Replace with your JSON file path
+cred = credentials.Certificate('/firebaseConfig.json')  # Replace with your JSON file path
 firebase_admin.initialize_app(cred)
 
 # Initialize Firestore
