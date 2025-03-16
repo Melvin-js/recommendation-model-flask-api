@@ -38,8 +38,13 @@ CORS(app)
 # db = firestore.client()
 
 
+#Server run
+# script_dir = os.path.dirname(os.path.abspath(__file__))
+# firebase_config_path = os.path.join(script_dir, 'firebaseConfig.json')
+# cred = credentials.Certificate(firebase_config_path)
+
 # Local Run
-cred = credentials.Certificate('/firebaseConfig.json')  # Replace with your JSON file path
+cred = credentials.Certificate('firebaseConfig.json') 
 firebase_admin.initialize_app(cred)
 
 # Initialize Firestore
@@ -404,7 +409,7 @@ def run_model(user_id):
 
 api_key = "HYA7MBM9MQT687ZDAXUZ27G9A"
 secret_key='21312edasASDASDASDASDASDS'
-palm_api_key = 'AIzaSyAxPQGhD6BZY5-oCHqNZQ4V2JhcgmgxluI'
+palm_api_key = 'AIzaSyDSvHhpXKobLuOs5RegiuvOE7h-Z4Ibze8'
 
 
 @app.route('/generateItinerary', methods=["GET", "POST"])
@@ -487,10 +492,11 @@ def get_weather_data(api_key: str, location: str, start_date: str, end_date: str
 
 def generate_itinerary(source, destination, start_date, end_date, no_of_day):
     palm.configure(api_key=palm_api_key)
-    model = palm.GenerativeModel(model_name="gemini-pro")
+    model = palm.GenerativeModel(model_name="gemini-1.5-pro")
     # print(list(palm.list_models()))
 
-    prompt = f"Generate a personalized trip itinerary for a {no_of_day}-day trip {source} to {destination} from {start_date} to {end_date}, with an optimum budget (Currency:INR)."
+    prompt = f"Generate a {no_of_day}-day trip itinerary for {source} to {destination} from {start_date} to {end_date}. Provide only the day-by-day details of the trip, including transport, accommodation, meals, and activities. Do not include any introductory, concluding, or summary statements. Do not add general remarks or conclusions like 'Have a nice trip' or 'Remember to adjust the itinerary.' Just provide the schedule and estimates."
+
     response = model.generate_content(prompt)
     return(response.text)
 
@@ -499,4 +505,4 @@ def generate_itinerary(source, destination, start_date, end_date, no_of_day):
 
 # Run the Flask app
 if __name__ == '__main__':
-    app.run(debug=True)
+   app.run(host='0.0.0.0', port=5000)
